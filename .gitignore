@@ -1,0 +1,25 @@
+# Python
+venv/
+.env/
+__pycache__/
+*.pyc
+
+# Python packages
+site-packages/
+dist/
+build/
+
+# NLP / ML
+*.model
+*.bin
+*.pt
+*.onnx
+
+# Logs
+*.log
+
+# Node
+node_modules/
+
+# OS
+.DS_Store
