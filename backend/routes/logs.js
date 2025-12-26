@@ -4,6 +4,7 @@ const axios = require("axios");
 const ErrorLog = require("../models/ErrorLog");
 const generateFingerprint = require("../utils/fingerprint");
 const { maskLog } = require("../services/presidioService");
+const authenticateToken = require("../middleware/auth");
 
 const NIM_CHAT_COMPLETIONS_URL = "https://integrate.api.nvidia.com/v1/chat/completions";
 const NIM_MODEL = "meta/llama-4-maverick-17b-128e-instruct";
@@ -51,8 +52,9 @@ async function generateAiSolution(maskedLog) {
 }
 
 // Submit error log
-router.post("/submit", async (req, res) => {
-  const { userId, rawLog } = req.body;
+router.post("/submit", authenticateToken, async (req, res) => {
+  const { rawLog } = req.body;
+  const userId = req.userId; // Extract from JWT token
 
   try {
     const maskedLog = await maskLog(rawLog);
@@ -71,6 +73,8 @@ router.post("/submit", async (req, res) => {
       return res.json({
         fromCache: true,
         solution: existingLog.aiSolution,
+        maskedLog: existingLog.maskedLog,
+        hitCount: existingLog.hitCount,
         _id: existingLog._id
       });
     }
@@ -90,6 +94,8 @@ router.post("/submit", async (req, res) => {
       fromCache: false,
       message: aiSolution,
       solution: aiSolution,
+      maskedLog: newLog.maskedLog,
+      hitCount: newLog.hitCount,
       _id: newLog._id
     });
 
@@ -99,13 +105,30 @@ router.post("/submit", async (req, res) => {
 });
 
 // Get error log by ID
-router.get('/get/:id', async (req, res) => {
+router.get('/get/:id', authenticateToken, async (req, res) => {
   try {
     const log = await ErrorLog.findById(req.params.id);
     if (!log) return res.status(404).json({ message: 'Log not found' });
+    // Ensure user can only access their own logs
+    if (log.userId !== req.userId) {
+      return res.status(403).json({ message: 'Access denied' });
+    }
     res.json(log);
   } catch (err) {
     res.status(500).json({ message: err.message });
+  }
+});
+
+// Get user's log history
+router.get('/history', authenticateToken, async (req, res) => {
+  try {
+    const logs = await ErrorLog.find({ userId: req.userId })
+      .sort({ createdAt: -1 })
+      .select('_id maskedLog aiSolution hitCount createdAt updatedAt');
+    
+    res.json(logs);
+  } catch (err) {
+    res.status(500).json({ error: "Server error" });
   }
 });
 
